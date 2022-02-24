@@ -15,4 +15,26 @@ git clone --no-hardlinks ~/PycharmProjects/SignInProgram/SignInProgram/.git/  # 
 
 pip install -Ur SignInProgram/requirements.txt pip
 
+cat > ~/.local/share/applications/SignInProgram.desktop << EOF1
+[Desktop Entry]
+Name=Sign In Program
+Comment=A system for keeping record of who attends an event, for how long, and upload those records to a Google Sheet
+Exec=bash -c 'cd $PWD/SignInProgram && python3 $PWD/SignInProgram/main.py %U'
+Icon=$PWD/SignInProgram/icon.png
+Terminal=false
+Type=Application
+EOF1
+
+cat > SignInProgram/SignInProgram.desktop << EOF2
+[Desktop Entry]
+Name=Sign In Program
+Comment=A system for keeping record of who attends an event, for how long, and upload those records to a Google Sheet
+Exec=bash -c 'cd $PWD/SignInProgram && python3 $PWD/SignInProgram/main.py %U'
+Icon=$PWD/SignInProgram/icon.png
+Terminal=false
+Type=Application
+EOF2
+
+chmod +x SignInProgram/SignInProgram.desktop
+
 echo Install Complete!
