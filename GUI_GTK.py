@@ -28,6 +28,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.set_default_size(500, 500)
         self.box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.add(self.box)
+        self.set_icon_from_file('Icon/icon.png')
 
         # Creating the header bar.
 

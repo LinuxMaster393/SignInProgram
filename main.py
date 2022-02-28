@@ -33,12 +33,12 @@ def main():
         database = Database()
 
     GUI.main(config["GUI"], database)
-    if config["GUI"]["UPLOADER"]["Upload Destination"] is not None and \
+    if config["UPLOADER"]["Upload Destination"] is not None and \
             config["GUI"]["Auto Upload On Quit"] and \
             GUI.saveFile != "":
-        if config["GUI"]["UPLOADER"]["Auto Log Out On Quit"]:
+        if config["UPLOADER"]["Auto Log Out On Quit"]:
             database.logAllOut()
-        Uploader.main(GUI.saveFile, config["GUI"]["UPLOADER"])
+        Uploader.main(GUI.saveFile, config["UPLOADER"])
 
 
 if __name__ == '__main__':

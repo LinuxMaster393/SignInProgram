@@ -20,8 +20,8 @@ cat > ~/.local/share/applications/SignInProgram.desktop << EOF1
 Name=Sign In Program
 Comment=A system for keeping record of who attends an event, for how long, and upload those records to a Google Sheet
 Exec=bash -c 'cd $PWD/SignInProgram && python3 $PWD/SignInProgram/main.py %U'
-Icon=$PWD/SignInProgram/icon.png
-Terminal=false
+Icon=$PWD/SignInProgram/Icon/icon.png
+Terminal=true
 Type=Application
 EOF1
 
@@ -30,8 +30,8 @@ cat > SignInProgram/SignInProgram.desktop << EOF2
 Name=Sign In Program
 Comment=A system for keeping record of who attends an event, for how long, and upload those records to a Google Sheet
 Exec=bash -c 'cd $PWD/SignInProgram && python3 $PWD/SignInProgram/main.py %U'
-Icon=$PWD/SignInProgram/icon.png
-Terminal=false
+Icon=$PWD/SignInProgram/Icon/icon.png
+Terminal=true
 Type=Application
 EOF2
 
