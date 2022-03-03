@@ -11,7 +11,7 @@ then
     exit
 fi
 
-git clone --no-hardlinks ~/PycharmProjects/SignInProgram/SignInProgram/.git/  # TODO Replace with URL to git release branch
+git clone -b release --single-branch https://github.com/LinuxMaster393/SignInProgram.git  # TODO Replace with URL to git release branch
 
 pip install -Ur SignInProgram/requirements.txt pip
 
