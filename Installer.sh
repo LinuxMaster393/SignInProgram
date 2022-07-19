@@ -11,7 +11,7 @@ then
     exit
 fi
 
-git clone -b release --single-branch https://github.com/LinuxMaster393/SignInProgram.git  # TODO Replace with URL to git release branch
+git clone -b release --single-branch https://github.com/LinuxMaster393/SignInProgram.git
 
 pip install -Ur SignInProgram/requirements.txt pip
 
@@ -35,6 +35,7 @@ Terminal=true
 Type=Application
 EOF2
 
+chmod +x ~/.local/share/applications/SignInProgram.desktop
 chmod +x SignInProgram/SignInProgram.desktop
 
 echo Install Complete!

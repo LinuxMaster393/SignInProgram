@@ -36,9 +36,17 @@ class MainWindow(Gtk.ApplicationWindow):
         self.header.set_show_close_button(True)
         self.header.props.title = config["Window Name"]
         self.menu = Gio.Menu()
-        self.menu.append_item(Gio.MenuItem().new("Open", "app.open"))
-        self.menu.append_item(Gio.MenuItem().new("Save", "app.save"))
-        self.menu.append_item(Gio.MenuItem().new("Upload", "app.upload"))
+
+        self.sectionA = Gio.Menu()
+        self.sectionA.append_item(Gio.MenuItem().new("Open", "app.open"))
+        self.sectionA.append_item(Gio.MenuItem().new("Save", "app.save"))
+        self.sectionA.append_item(Gio.MenuItem().new("Upload", "app.upload"))
+        self.menu.append_section(None, self.sectionA)
+
+        self.sectionB = Gio.Menu()
+        self.sectionB.append_item(Gio.MenuItem().new("Upload All", "app.upload-all"))
+        self.menu.append_section(None, self.sectionB)
+
         self.menuButton = Gtk.MenuButton(menu_model=self.menu)
         self.header.pack_start(self.menuButton)
         self.set_titlebar(self.header)
@@ -141,7 +149,7 @@ class MainWindow(Gtk.ApplicationWindow):
             database.updateEntry(int(path), name=text.title())
         self.updateEntries()
         self.updateAutoFill(text.title())
-        #self.changed = True
+        # self.changed = True
 
     @staticmethod
     def add_filters(dialog):
@@ -169,7 +177,7 @@ class MainWindow(Gtk.ApplicationWindow):
         dialog.destroy()
 
         if response == Gtk.ResponseType.OK:
-            if len(database) > 0:
+            if len(database.data) > 0:
                 dialog = Gtk.MessageDialog(
                     transient_for=self,
                     flags=0,
@@ -231,6 +239,13 @@ class MainWindow(Gtk.ApplicationWindow):
                 if self.config["UPLOADER"]["Upload Destination"] is not None and \
                         self.config["GUI"]["Auto Upload On Quit"]:
                     Uploader.main(saveFile, self.config["UPLOADER"])
+
+    # noinspection PyUnusedLocal
+    def uploadAll(self, *args):
+        if self.changed:
+            self.save()
+        if self.config["UPLOADER"]["Upload Destination"] is not None:
+            Uploader.uploadAllNotUploaded(self.config["UPLOADER"])
 
     # noinspection PyUnusedLocal
     def on_destroy(self, *args) -> bool:
@@ -337,8 +352,11 @@ class Application(Gtk.Application):
         self.add_action(action)
 
         action = Gio.SimpleAction(name="update")
-
         action.connect("activate", self.window.updateEntries)
+        self.add_action(action)
+
+        action = Gio.SimpleAction(name="upload-all")
+        action.connect("activate", self.window.uploadAll)
         self.add_action(action)
 
     def makeWindow(self):

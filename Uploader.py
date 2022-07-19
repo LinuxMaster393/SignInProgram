@@ -2,45 +2,13 @@ import datetime
 import json
 import logging
 import os
-import traceback
-from typing import List, Any
 
-from googleapiclient.discovery import build
-from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
 
-
-class Entry:
-    def __init__(self, _name: str, signIn, signOut, ID):
-        self.name = _name
-        self.signIn = signIn
-        if signOut is not None:
-            self.signOutTime = signOut
-            self.totalTime = signOut - signIn
-        else:
-            self.signOutTime = None
-            self.totalTime = None
-        self.id = ID
-
-    def sign_out(self):
-        self.signOutTime = datetime.datetime.today()
-        self.totalTime = (self.signOutTime - self.signIn)
-
-    class EntryEncoder(json.JSONEncoder):
-        def default(self, o: Any) -> Any:
-            if isinstance(o, Entry):
-                return {
-                        "Entry": {
-                            "Name": o.name,
-                            "Sign In": o.signIn,
-                            "Sign Out": o.signOutTime,
-                            "ID": o.id
-                        }
-                    }
-            if isinstance(o, datetime.datetime):
-                return o.isoformat(sep=" ", timespec="seconds")
-            return json.JSONEncoder().default(o)
+from Database import Database, Entry
 
 
 class SaveFile:
@@ -57,27 +25,9 @@ class SaveFile:
     def opener(self, path, flags):
         return os.open(path, flags, dir_fd=self.dir_fd)
 
-    def markUploaded(self, entries: List[Entry]):
-        json.dump({
-                    "Database": {
-                        "Uploaded": True,
-                        "Entries": entries
-                    }
-                }, open(self.saveFileWrite, "w", opener=self.opener), cls=Entry.EntryEncoder, indent=2)
-
-
-def EntryDecoder(dct):
-    if "Database" in dct:
-        exit(0)
-    if "Entry" in dct:
-        if dct["Entry"]["Sign Out"] is None:
-            return Entry(dct["Entry"]["Name"], datetime.datetime.fromisoformat(dct["Entry"]["Sign In"]),
-                         None, dct["Entry"]["ID"])
-        else:
-            return Entry(dct["Entry"]["Name"], datetime.datetime.fromisoformat(dct["Entry"]["Sign In"]),
-                         datetime.datetime.fromisoformat(dct["Entry"]["Sign Out"]), dct["Entry"]["ID"])
-
-    return dct
+    def markUploaded(self, database: Database):
+        database.uploaded = True
+        database.saveToFile(open(self.saveFileWrite, "w", opener=self.opener))
 
 
 def gSheet(file: str, config: dict):
@@ -125,35 +75,40 @@ def gSheet(file: str, config: dict):
 
     logging.info("Fetching from Json...")
     saveFile = SaveFile(file)
-    entries = json.load(saveFile.saveFile, object_hook=EntryDecoder)
-    if not isinstance(entries, list):
+    database = json.load(saveFile.saveFile, object_hook=Database.databaseDecoder)
+    if not isinstance(database, Database):
         raise TypeError("Incompatible or broken record file.")
-    for i in entries:
+    for i in database.data:
         if not isinstance(i, Entry):
             raise TypeError("Incompatible or broken record file.")
     logging.info("Fetch from Json Complete.")
 
+    if database.uploaded:
+        logging.warning("File already marked as uploaded. Skipping.")
+        return
+
     values = []
 
-    for i in entries:
-        if i.signOutTime is not None:
-            values.append(
-                [
-                    i.name,
-                    i.signIn.isoformat(sep=" ", timespec="seconds"),
-                    i.signOutTime.isoformat(sep=" ", timespec="seconds"),
-                ]
-            )
-        else:
-            values.append(
-                [
+    for i in database.data:
+        if i.upload:
+            if i.signout is not None:
+                values.append(
+                    [
+                        i.name,
+                        i.signin.isoformat(sep=" ", timespec="seconds"),
+                        i.signout.isoformat(sep=" ", timespec="seconds"),
+                    ]
+                )
+            else:
+                values.append(
+                    [
 
-                    i.name,
-                    i.signIn.isoformat(sep=" ", timespec="seconds"),
-                    ""
-
-                ]
-            )
+                        i.name,
+                        i.signin.isoformat(sep=" ", timespec="seconds"),
+                        ""
+                    ]
+                )
+            i.upload = False
 
     body = {
         # A list of updates to apply to the spreadsheet.
@@ -173,7 +128,7 @@ def gSheet(file: str, config: dict):
     logging.debug(response)
     print("\n\n")
 
-    saveFile.markUploaded(entries)
+    saveFile.markUploaded(database)
     saveFile.saveFile.close()
 
 
@@ -188,6 +143,34 @@ def main(file: str, config: dict):
         gSheet(file, config)"""
     logging.debug("Running Main")
     gSheet(file, config)
+
+
+def uploadAllNotUploaded(config: dict):
+    records = os.scandir("Records")
+    for i in records:
+        assert(isinstance(i, os.DirEntry))
+        if i.is_file() and i.name.endswith(".json"):
+            file = open(i.path, "r")
+            if file.readlines(3)[2].strip() == '"Uploaded": false,':
+                main(i.name, config)
+
+
+def markAllUploaded():
+    records = os.scandir("Records")
+    for i in records:
+        assert (isinstance(i, os.DirEntry))
+        if i.is_file() and i.name.endswith(".json"):
+            logging.info("Fetching from Json...")
+            saveFile = SaveFile(i.name)
+            database = json.load(saveFile.saveFile, object_hook=Database.databaseDecoder)
+            if not isinstance(database, Database):
+                raise TypeError("Incompatible or broken record file.")
+            for j in database.data:
+                if not isinstance(j, Entry):
+                    raise TypeError("Incompatible or broken record file.")
+                j.upload = False
+            logging.info("Fetch from Json Complete. Marking as Uploaded.")
+            saveFile.markUploaded(database)
 
 
 if __name__ == '__main__':

@@ -1,9 +1,7 @@
 import logging
-import traceback
 import os
 import sys
-
-# TODO Add SignInProgram.desktop
+import traceback
 
 args = sys.argv
 
@@ -47,7 +45,15 @@ if __name__ == '__main__':
                         format='[%(asctime)s] %(levelname)s: %(module)s.%(funcName)s():%(lineno)d : %(message)s',
                         datefmt='%m/%d/%Y %I:%M:%S %p')
     try:
-        main()
+        if "mark-all-uploaded" in args:
+            import Uploader
+            Uploader.markAllUploaded()
+        elif "upload-all" in args:
+            import Uploader
+            import ConfigManager
+            Uploader.uploadAllNotUploaded(ConfigManager.load())
+        else:
+            main()
     except BaseException as e:
         logging.error("".join(traceback.format_exception(type(e), e, e.__traceback__)).rstrip("\n"))
         raise e

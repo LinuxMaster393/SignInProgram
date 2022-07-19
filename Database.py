@@ -2,7 +2,7 @@ import datetime
 import json
 # from builtins import function
 import logging
-from typing import Optional, TextIO, Any
+from typing import Optional, TextIO, Any, List, overload
 
 import gi
 
@@ -17,6 +17,7 @@ class Entry:
         :param name: The name of the entry.
         :param ID: the ID of the person.
         """
+        self.upload: bool = True
         self.name: str = name
         self.ID: int = ID
         self.signin: datetime.datetime = datetime.datetime.now()
@@ -27,15 +28,23 @@ class Entry:
     def update(self, **kwargs):
         updateTotal: bool = False
         if "name" in kwargs:
-            self.name = kwargs["name"]
+            if self.name != kwargs["name"]:
+                self.name = kwargs["name"]
+                self.upload = True
         if "ID" in kwargs:
-            self.ID = kwargs["ID"]
+            if self.ID != kwargs["ID"]:
+                self.ID = kwargs["ID"]
+                self.upload = True
         if "signin" in kwargs:
-            self.signin = datetime.datetime.fromisoformat(kwargs["signin"])
-            updateTotal = True
+            if self.signin != datetime.datetime.fromisoformat(kwargs["signin"]):
+                self.signin = datetime.datetime.fromisoformat(kwargs["signin"])
+                self.upload = True
+                updateTotal = True
         if "signout" in kwargs:
-            self.signout = datetime.datetime.fromisoformat(kwargs["signout"])
-            updateTotal = True
+            if self.signout != datetime.datetime.fromisoformat(kwargs["signout"]):
+                self.signout = datetime.datetime.fromisoformat(kwargs["signout"])
+                self.upload = True
+                updateTotal = True
 
         if self.signout is not None and updateTotal:
             self.signtotal = self.signout - self.signin
@@ -46,7 +55,7 @@ class Entry:
         self.update(signout=datetime.datetime.now().isoformat())
 
 
-class Database(list):
+class Database:
     """
     A class containing all the entry logs from the Sign in program.
     """
@@ -54,6 +63,7 @@ class Database(list):
     def __init__(self):
         super().__init__()
         self.uploaded: bool = False
+        self.data: List[Entry] = []
 
     def updateEntry(self, ID: int, **kwargs):
         """
@@ -61,15 +71,17 @@ class Database(list):
 
         :param ID: The ID of the entry to update.
         """
-        for i in self:
+        for i in self.data:
             if i.ID == ID:
                 i.update(**kwargs)
+                if i.upload:
+                    self.uploaded = False
                 return
         logging.warning("Could not find entry with an ID of " + str(ID) + " of type " + str(type(ID)))
         print("Could not find entry with an ID of", ID, "of type", type(ID))
 
     def getEntry(self, ID: int) -> Optional[Entry]:
-        for i in self:
+        for i in self.data:
             if i.ID == ID:
                 return i
         logging.warning("Could not find entry with an ID of " + str(ID))
@@ -79,11 +91,11 @@ class Database(list):
         Removes a person's entry.
         :param ID: The ID of the entry to remove.
         """
-        for i in self:
+        for i in self.data:
             if i.ID == ID:
-                self.remove(i)
-                for j in range(len(self)):
-                    self[j].update(ID=j)
+                self.data.remove(i)
+                for j in range(len(self.data)):
+                    self.data[j].update(ID=j)
                 break
 
     def logInOrOut(self, name: str) -> bool:
@@ -94,12 +106,14 @@ class Database(list):
         """
         name = name.title()
         logging.info("Log in or out " + name)
-        for i in self:
+        for i in self.data:
             if i.name == name and i.signout is None:
                 i.logout()
+                if i.upload:
+                    self.uploaded = False
                 return True
 
-        self.append(Entry(name, len(self)))
+        self.data.append(Entry(name, len(self.data)))
         return False
 
     def genListStore(self) -> Gtk.ListStore:
@@ -108,7 +122,7 @@ class Database(list):
         :return: The ListScore containing all the entries for display.
         """
         store = Gtk.ListStore(str, str, str, str)
-        for i in self:
+        for i in self.data:
             assert isinstance(i, Entry)
             if i.signout is None:
                 store.append([i.name, i.signin.isoformat(" ", "seconds"), "", ""])
@@ -119,12 +133,14 @@ class Database(list):
         return store
 
     def logAllOut(self):
-        for i in self:
+        for i in self.data:
             if i.signout is None:
                 i.logout()
+                if i.upload:
+                    self.uploaded = False
 
     def isAllOut(self):
-        for i in self:
+        for i in self.data:
             if i.signout is None:
                 return False
         return True
@@ -132,12 +148,10 @@ class Database(list):
     class DatabaseEncoder(json.JSONEncoder):
         def default(self, o: Any) -> Any:
             if isinstance(o, Database):
-                array = []
-                array.extend(o)
                 return {
                     "Database": {
                         "Uploaded": o.uploaded,
-                        "Entries": array
+                        "Entries": o.data
                     }
                 }
             if isinstance(o, Entry):
@@ -146,7 +160,8 @@ class Database(list):
                             "Name": o.name,
                             "Sign In": o.signin,
                             "Sign Out": o.signout,
-                            "ID": o.ID
+                            "ID": o.ID,
+                            "Changed": o.upload
                         }
                     }
             if isinstance(o, datetime.datetime):
@@ -157,8 +172,9 @@ class Database(list):
     def databaseDecoder(dct: dict):
         if "Database" in dct:
             database = Database()
-            database.uploaded = dct["Database"]["Uploaded"]
-            database.extend(Database.databaseDecoder(dct["Database"]["Entries"]))
+            if "Uploaded" in dct["Database"]:
+                database.uploaded = dct["Database"]["Uploaded"]
+            database.data.extend(Database.databaseDecoder(dct["Database"]["Entries"]))
             return database
         if "Entry" in dct:
             i = dct["Entry"]
@@ -168,21 +184,16 @@ class Database(list):
                 entry.signout = None
                 entry.signtotal = None
             else:
-                entry.update(signout=i["Sign Out"])
+                entry.signout = datetime.datetime.fromisoformat(i["Sign Out"])
+                entry.signtotal = entry.signout - entry.signin
+            if "Changed" in i:
+                entry.upload = i["Changed"]
             return entry
         return dct
 
     @staticmethod
     def loadFromFile(file: TextIO):
-        db = Database()
-        load = json.load(file, object_hook=Database.databaseDecoder)
-        if "Uploaded" in load:
-            db.uploaded = load["Uploaded"]
-            for i in load["Entries"]:
-                db.append(i)
-        else:
-            for i in load:
-                db.append(i)
+        db = json.load(file, object_hook=Database.databaseDecoder)
         return db
 
     def saveToFile(self, file: TextIO):
