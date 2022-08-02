@@ -41,13 +41,21 @@ class Entry:
                 self.upload = True
                 updateTotal = True
         if "signout" in kwargs:
-            if self.signout != datetime.datetime.fromisoformat(kwargs["signout"]):
+            if kwargs["signout"] is None:
+                self.signout = None
+                self.upload = True
+                self.signtotal = None
+            elif self.signout != datetime.datetime.fromisoformat(kwargs["signout"]):
                 self.signout = datetime.datetime.fromisoformat(kwargs["signout"])
                 self.upload = True
                 updateTotal = True
 
-        if self.signout is not None and updateTotal:
-            self.signtotal = self.signout - self.signin
+        if self.signout is not None:
+            if self.signin > self.signout:
+                self.signout = self.signin
+                updateTotal = True
+            if updateTotal:
+                self.signtotal = self.signout - self.signin
         elif self.signout is None:
             self.signtotal = None
 

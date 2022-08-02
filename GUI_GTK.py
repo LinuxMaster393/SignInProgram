@@ -1,8 +1,9 @@
 import logging
 import os
 import sys
-from datetime import date
-from typing import Union
+import traceback
+from datetime import date, datetime
+from typing import Union, Optional
 
 import gi
 
@@ -59,19 +60,31 @@ class MainWindow(Gtk.ApplicationWindow):
 
         self.tree = Gtk.TreeView(model=self.listStore)
 
-        self.editableTextRender = Gtk.CellRendererText()
-        self.editableTextRender.set_property("editable", True)
+        self.nameColumnRender = Gtk.CellRendererText()
+        self.signInColumnRender = Gtk.CellRendererText()
+        self.signOutColumnRender = Gtk.CellRendererText()
+
+        self.nameColumnRender.set_property("editable", True)
+        self.signInColumnRender.set_property("editable", True)
+        self.signOutColumnRender.set_property("editable", True)
+
         renderer = Gtk.CellRendererText()
 
         for i, column_title in enumerate(["Name", "Sign In Time", "Sign Out Time", "Total Time"]):
             if column_title == "Name":
-                column = Gtk.TreeViewColumn(column_title, self.editableTextRender, text=i)
+                column = Gtk.TreeViewColumn(column_title, self.nameColumnRender, text=i)
+            elif column_title == "Sign In Time":
+                column = Gtk.TreeViewColumn(column_title, self.signInColumnRender, text=i)
+            elif column_title == "Sign Out Time":
+                column = Gtk.TreeViewColumn(column_title, self.signOutColumnRender, text=i)
             else:
                 column = Gtk.TreeViewColumn(column_title, renderer, text=i)
             # column.set_sort_column_id(i)
             self.tree.append_column(column)
 
-        self.editableTextRender.connect("edited", self.text_edited)
+        self.nameColumnRender.connect("edited", self.nameEdited)
+        self.signInColumnRender.connect("edited", self.signInEdited)
+        self.signOutColumnRender.connect("edited", self.signOutEdited)
 
         self.box.pack_start(self.tree, True, True, 0)
 
@@ -123,8 +136,8 @@ class MainWindow(Gtk.ApplicationWindow):
         self.changed = True
 
     # noinspection PyUnusedLocal
-    def text_edited(self, widget, path, text):
-        logging.info("Editing entry at " + path + " to value " + text)
+    def nameEdited(self, widget, path, text):
+        logging.info("Changing name of entry at " + path + " to \"" + text + "\"")
         global database
         assert isinstance(text, str)
         if text == "" or text.isspace():
@@ -136,7 +149,7 @@ class MainWindow(Gtk.ApplicationWindow):
                 text="Are you sure you want to delete this entry?",
             )
             dialog.format_secondary_text(
-                "If you do, this can not be undone."
+                "This can not be undone."
             )
             response = dialog.run()
 
@@ -149,6 +162,80 @@ class MainWindow(Gtk.ApplicationWindow):
             database.updateEntry(int(path), name=text.title())
         self.updateEntries()
         self.updateAutoFill(text.title())
+        # self.changed = True
+
+    def signInEdited(self, widget, path, text):
+        logging.info("Changing sign in time of entry at " + path + " to \"" + text + "\"")
+        global database
+        assert isinstance(text, str)
+        if text == "" or text.isspace():
+            dialog = Gtk.MessageDialog(
+                transient_for=self,
+                flags=0,
+                message_type=Gtk.MessageType.WARNING,
+                buttons=Gtk.ButtonsType.YES_NO,
+                text="Are you sure you want to delete this entry?",
+            )
+            dialog.format_secondary_text(
+                "This can not be undone."
+            )
+            response = dialog.run()
+
+            dialog.destroy()
+            if response == Gtk.ResponseType.YES:
+                self.updateAutoFill(database.getEntry(int(path)).name)
+                database.removeEntry(int(path))
+        else:
+            try:
+                if database.getEntry(int(path)).signout is not None and \
+                        database.getEntry(int(path)).signout < datetime.fromisoformat(text):
+                    logging.warning("Sign in time came after sign out time while updating the sign in time.")
+                    raise Exception("sign in time came after sign out time")
+                database.updateEntry(int(path), signin=text)
+            except Exception as e:
+                dialog = Gtk.MessageDialog(
+                    transient_for=self,
+                    flags=0,
+                    message_type=Gtk.MessageType.ERROR,
+                    buttons=Gtk.ButtonsType.CANCEL,
+                    text="Invalid Sign In Time",
+                )
+                dialog.format_secondary_text(
+                    "The time you inputted for the sign in time was incorrectly formatted or came after the sign out "
+                    "time."
+                )
+                dialog.run()
+                dialog.destroy()
+        self.updateEntries()
+        # self.changed = True
+
+    def signOutEdited(self, widget, path, text):
+        logging.info("Changing sign out time of entry at " + path + " to \"" + text + "\"")
+        global database
+        assert isinstance(text, str)
+        if text == "" or text.isspace():
+            database.updateEntry(int(path), signout=None)
+        else:
+            try:
+                if database.getEntry(int(path)).signin > datetime.fromisoformat(text):
+                    logging.warning("Sign out time came before sign in time while updating the sign out time.")
+                    raise Exception("sign out time came before sign in time")
+                database.updateEntry(int(path), signout=text)
+            except Exception as e:
+                dialog = Gtk.MessageDialog(
+                    transient_for=self,
+                    flags=0,
+                    message_type=Gtk.MessageType.ERROR,
+                    buttons=Gtk.ButtonsType.CANCEL,
+                    text="Invalid Sign out Time",
+                )
+                dialog.format_secondary_text(
+                    "The time you inputted for the sign out time was incorrectly formatted or came before the sign in "
+                    "time."
+                )
+                dialog.run()
+                dialog.destroy()
+        self.updateEntries()
         # self.changed = True
 
     @staticmethod
@@ -222,6 +309,27 @@ class MainWindow(Gtk.ApplicationWindow):
             dialog.destroy()
 
             if response == Gtk.ResponseType.OK:
+                if not database.isAllOut():
+                    if self.config["Auto Log Out On Quit"]:
+                        database.logAllOut()
+                    elif not skipAsking:
+                        dialog = Gtk.MessageDialog(
+                            transient_for=self,
+                            flags=0,
+                            message_type=Gtk.MessageType.WARNING,
+                            buttons=Gtk.ButtonsType.YES_NO,
+                            text="Not everyone has been logged out.",
+                        )
+                        dialog.add_button(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
+                        dialog.format_secondary_text(
+                            "Do you want to log everyone out?"
+                        )
+                        response = dialog.run()
+                        dialog.destroy()
+                        if response == Gtk.ResponseType.YES:
+                            database.logAllOut()
+                        elif response == Gtk.ResponseType.CANCEL:
+                            logging.debug("User Canceled Action.")
                 database.saveToFile(open(filename, "w"))
                 saveFile = filename
                 return True
@@ -292,14 +400,24 @@ class MainWindow(Gtk.ApplicationWindow):
                             if response == Gtk.ResponseType.YES:
                                 database.logAllOut()
                             elif response == Gtk.ResponseType.CANCEL:
-                                logging.debug("User Canceled Action. Returning.")
-                                return True
+                                logging.debug("User Canceled Action.")
                     return not self.save()
                 elif response == Gtk.ResponseType.CANCEL:
                     return True
 
         self.get_application().on_quit()
         return False
+
+    def exit_window(self):
+        global database
+        assert isinstance(database, Database)
+        logging.debug("exiting window")
+
+        if self.changed:
+            if self.config["Auto Save On Quit"]:
+                self.save(skipAsking=True)
+
+        self.get_application().on_quit()
 
     def updateEntries(self):
         global database
@@ -331,7 +449,7 @@ class MainWindow(Gtk.ApplicationWindow):
 class Application(Gtk.Application):
     def __init__(self, config: dict, **kwargs):
         super().__init__(application_id="none.none.none", **kwargs)
-        self.window = None
+        self.window: Optional[MainWindow] = None
         self.config = config
 
     def do_startup(self):
@@ -376,13 +494,16 @@ class Application(Gtk.Application):
         self.window.destroy()
         self.quit()
 
+    def exit_window(self):
+        self.window.exit_window()
+
 
 def main(config: dict, _database: Database):
     """
     :param config: A dictionary containing the GUI configuration.
     :param _database: The Database for the entries.
     """
-    global database
+    global database, app
     database = _database
 
     if "Records" not in os.listdir():
@@ -397,6 +518,7 @@ def main(config: dict, _database: Database):
 
 database: Union[Database, None] = None
 saveFile = ""
+app: Optional[Application] = None
 
 if __name__ == "__main__":
     import ConfigManager

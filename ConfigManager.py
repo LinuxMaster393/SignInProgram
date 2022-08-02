@@ -16,7 +16,9 @@ def __generateConfig__():
                       "Auto Complete": "",
                       "Auto Log Out On Quit": True,
                       "Auto Save On Quit": True,
-                      "Auto Upload On Quit": False}
+                      "Auto Upload On Quit": False,
+                      "# Formatted in 24 hour time as HH:MM:SS, put \"None\" to disable auto quitting.": None,
+                      "Auto Quit Time": "none"}
     config["UPLOADER"] = {
         "Credentials File Name": "credentials.json",
         "# URL to the google sheet.": None,
@@ -42,7 +44,8 @@ def load() -> Dict[str, Any]:
             "Auto Complete": "[]",
             "Auto Log Out On Quit": True,
             "Auto Save On Quit": True,
-            "Auto Upload On Quit": False
+            "Auto Upload On Quit": False,
+            "Auto Quit Time": "none"
         },
         "UPLOADER": {
             "Credentials File Name": "credentials.json",
@@ -59,6 +62,7 @@ def load() -> Dict[str, Any]:
             "Auto Log Out On Quit": config["MAIN"].getboolean("Auto Log Out On Quit"),
             "Auto Save On Quit": config["MAIN"].getboolean("Auto Save On Quit"),
             "Auto Upload On Quit": config["MAIN"].getboolean("Auto Upload On Quit"),
+            "Auto Quit Time": config["MAIN"]["Auto Quit Time"],
             "UPLOADER": Any
         },
         "UPLOADER": {
