@@ -3,6 +3,7 @@ import json
 import logging
 import os
 
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -40,30 +41,7 @@ def gSheet(file: str, config: dict):
     # Google Sheets API Setup
     logging.debug("Uploading gSheet")
 
-    # If modifying these scopes, delete the file token.json.
-    SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
-
-    # The ID and range of a sample spreadsheet.
-    # SAMPLE_SPREADSHEET_ID = '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms'
-    # SAMPLE_RANGE_NAME = 'Class Data!A2:E'
-
-    creds = None
-    # The file token.json stores the user's access and refresh tokens, and is
-    # created automatically when the authorization flow completes for the first
-    # time.
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-    # If there are no (valid) credentials available, let the user log in.
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                config["Credentials File Name"], SCOPES)
-            creds = flow.run_local_server(port=0)
-        # Save the credentials for the next run
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
+    creds = verifyCreds(config)
 
     service = build('sheets', 'v4', credentials=creds)
 
@@ -76,6 +54,11 @@ def gSheet(file: str, config: dict):
     logging.info("Fetching from Json...")
     saveFile = SaveFile(file)
     database = json.load(saveFile.saveFile, object_hook=Database.databaseDecoder)
+    print(database)
+    if isinstance(database, list):
+        dBase = Database()
+        dBase.data = database.copy()
+        database = dBase
     if not isinstance(database, Database):
         raise TypeError("Incompatible or broken record file.")
     for i in database.data:
@@ -132,6 +115,47 @@ def gSheet(file: str, config: dict):
     saveFile.saveFile.close()
 
 
+# noinspection SpellCheckingInspection
+def verifyCreds(config):
+    # If modifying these scopes, delete the file token.json.
+    SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+
+    # The ID and range of a sample spreadsheet.
+    # SAMPLE_SPREADSHEET_ID = '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms'
+    # SAMPLE_RANGE_NAME = 'Class Data!A2:E'
+
+    creds = None
+    # The file token.json stores the user's access and refresh tokens, and is
+    # created automatically when the authorization flow completes for the first
+    # time.
+    if os.path.exists('token.json'):
+        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+    # If there are no (valid) credentials available, let the user log in.
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            refresh_token = creds.refresh_token
+            try:
+                creds.refresh(Request())
+                if not creds.refresh_token:
+                    logging.warning("Credentials Refresh Token was removed! Restoring...")
+                    creds.refresh_token = refresh_token
+            except RefreshError:
+                os.remove("token.json")
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    config["Credentials File Name"], SCOPES)
+                creds = flow.run_local_server(port=0)
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                config["Credentials File Name"], SCOPES)
+            creds = flow.run_local_server(port=0)
+        # Save the credentials for the next run
+        with open('token.json', 'w') as token:
+            token.write(creds.to_json())
+        with open('refreshToken.json', "w") as refresh:
+            refresh.write(creds.refresh_token)
+    return creds
+
+
 def main(file: str, config: dict):
     """methodsFromConfig = config["Uploader Methods"].split(",")
     methods = []
@@ -146,13 +170,17 @@ def main(file: str, config: dict):
 
 
 def uploadAllNotUploaded(config: dict):
-    records = os.scandir("Records")
+    logging.info("Starting bulk upload")
+    records = os.listdir("Records")
+    records.sort()
+    print(records)
     for i in records:
-        assert(isinstance(i, os.DirEntry))
-        if i.is_file() and i.name.endswith(".json"):
-            file = open(i.path, "r")
-            if file.readlines(3)[2].strip() == '"Uploaded": false,':
-                main(i.name, config)
+        if i.endswith(".json"):
+            logging.debug("Attempting upload of: " + i)
+            file = open(os.path.join("Records", i), "r")
+            lines = file.readlines()
+            if lines[2].strip() != '"Uploaded": true,':
+                main(i, config)
 
 
 def markAllUploaded():
@@ -176,6 +204,7 @@ def markAllUploaded():
 if __name__ == '__main__':
     import ConfigManager
 
+    # noinspection SpellCheckingInspection
     logging.basicConfig(filename='SignInProgramUpload.log',
                         level=logging.DEBUG,
                         format='[%(asctime)s] %(levelname)s: %(module)s.%(funcName)s():%(lineno)d : %(message)s',

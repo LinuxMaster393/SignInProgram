@@ -11,7 +11,7 @@ timer: Optional[threading.Timer] = None
 
 def main():
     global timer
-    from datetime import date, datetime, time
+    from datetime import date, datetime, time, timedelta
     from json import JSONDecodeError
 
     import ConfigManager
@@ -37,7 +37,12 @@ def main():
         database = Database()
 
     if config["GUI"]["Auto Quit Time"] != "none":
-        timeTill = datetime.combine(date.today(), time.fromisoformat(config["GUI"]["Auto Quit Time"])) - datetime.now()
+        if datetime.now().time() > time.fromisoformat(config["GUI"]["Auto Quit Time"]):
+            timeTill = datetime.combine(date.today() + timedelta(days=1),
+                                        time.fromisoformat(config["GUI"]["Auto Quit Time"])) - datetime.now()
+        else:
+            timeTill = datetime.combine(date.today(), time.fromisoformat(config["GUI"]["Auto Quit Time"])) - datetime.now()
+        logging.debug("Auto Quitting at: " + str(timeTill))
         timer = threading.Timer(timeTill.total_seconds(), stop)
         timer.start()
 

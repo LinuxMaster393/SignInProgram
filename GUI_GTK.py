@@ -336,16 +336,35 @@ class MainWindow(Gtk.ApplicationWindow):
             else:
                 return False
         else:
+            if self.config["Auto Log Out On Quit"]:
+                database.logAllOut()
+            elif not skipAsking:
+                dialog = Gtk.MessageDialog(
+                    transient_for=self,
+                    flags=0,
+                    message_type=Gtk.MessageType.WARNING,
+                    buttons=Gtk.ButtonsType.YES_NO,
+                    text="Not everyone has been logged out.",
+                )
+                dialog.add_button(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
+                dialog.format_secondary_text(
+                    "Do you want to log everyone out?"
+                )
+                response = dialog.run()
+                dialog.destroy()
+                if response == Gtk.ResponseType.YES:
+                    database.logAllOut()
+                elif response == Gtk.ResponseType.CANCEL:
+                    logging.debug("User Canceled Action.")
             database.saveToFile(open("Records/" + str(date.today()) + "_Record.json", "w"))
             saveFile = str(date.today()) + "_Record.json"
             return True
 
     # noinspection PyUnusedLocal
-    def upload(self, *args):
-        if self.changed:
-            if self.save():
-                if self.config["UPLOADER"]["Upload Destination"] is not None and \
-                        self.config["GUI"]["Auto Upload On Quit"]:
+    def upload(self, skipSaving=False, *args):
+        if self.changed or database.uploaded:
+            if skipSaving or self.save():
+                if self.config["UPLOADER"]["Upload Destination"] is not None:
                     Uploader.main(saveFile, self.config["UPLOADER"])
 
     # noinspection PyUnusedLocal
@@ -364,6 +383,24 @@ class MainWindow(Gtk.ApplicationWindow):
         if self.changed:
             if self.config["Auto Save On Quit"]:
                 self.save(skipAsking=True)
+                if self.config["Auto Upload On Quit"]:
+                    self.upload(skipSaving=True)
+                else:
+                    dialog = Gtk.MessageDialog(
+                        transient_for=self,
+                        flags=0,
+                        message_type=Gtk.MessageType.QUESTION,
+                        buttons=Gtk.ButtonsType.YES_NO,
+                        text="Do you wish to upload?",
+                    )
+                    dialog.add_button(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
+                    response = dialog.run()
+
+                    dialog.destroy()
+                    if response == Gtk.ResponseType.YES:
+                        self.upload(skipSaving=True)
+                    elif response == Gtk.ResponseType.CANCEL:
+                        return True
             else:
                 dialog = Gtk.MessageDialog(
                     transient_for=self,
@@ -380,27 +417,6 @@ class MainWindow(Gtk.ApplicationWindow):
 
                 dialog.destroy()
                 if response == Gtk.ResponseType.YES:
-                    if not database.isAllOut():
-                        if self.config["Auto Log Out On Quit"]:
-                            database.logAllOut()
-                        else:
-                            dialog = Gtk.MessageDialog(
-                                transient_for=self,
-                                flags=0,
-                                message_type=Gtk.MessageType.WARNING,
-                                buttons=Gtk.ButtonsType.YES_NO,
-                                text="Not everyone has been logged out.",
-                            )
-                            dialog.add_button(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
-                            dialog.format_secondary_text(
-                                "Do you want to log everyone out?"
-                            )
-                            response = dialog.run()
-                            dialog.destroy()
-                            if response == Gtk.ResponseType.YES:
-                                database.logAllOut()
-                            elif response == Gtk.ResponseType.CANCEL:
-                                logging.debug("User Canceled Action.")
                     return not self.save()
                 elif response == Gtk.ResponseType.CANCEL:
                     return True
