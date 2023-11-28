@@ -179,6 +179,10 @@ def uploadAllNotUploaded(config: dict):
             logging.debug("Attempting upload of: " + i)
             file = open(os.path.join("Records", i), "r")
             lines = file.readlines()
+            if len(lines) < 3:
+                logging.info("File %s is less than three lines long. Skipping.", i)
+                continue
+
             if lines[2].strip() != '"Uploaded": true,':
                 main(i, config)
 
